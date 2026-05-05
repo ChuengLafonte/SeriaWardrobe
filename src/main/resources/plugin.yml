@@ -1,0 +1,21 @@
+name: SeriaWardrobe
+version: '${project.version}'
+main: id.seria.wardrobe.SeriaWardrobePlugin
+api-version: '1.21'
+author: Seria
+description: Armor wardrobe system — save and switch armor sets instantly.
+
+commands:
+  wardrobe:
+    description: Open your armor wardrobe.
+    aliases: [wd]
+    usage: /wardrobe
+    permission: seriawardrobe.use
+
+permissions:
+  seriawardrobe.use:
+    description: Allows a player to open their wardrobe.
+    default: true
+  seriawardrobe.admin:
+    description: Admin commands for SeriaWardrobe.
+    default: op

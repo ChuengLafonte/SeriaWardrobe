@@ -1,0 +1,20 @@
+# SeriaWardrobe Configuration
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# How many armor sets the wardrobe can hold (max 9).
+max-sets: 9
+
+# GUI title shown to the player (supports color codes with §).
+gui-title: "§8⚔ §bWardrobe §8⚔"
+
+# The title shown on each armor-set page (use {page} as placeholder).
+page-title: "§8⚔ §bWardrobe §7» §fSet {page}"
+
+# Messages (supports §-color-codes)
+messages:
+  no-permission: "§cYou don't have permission to use the wardrobe."
+  set-equipped: "§aArmor set §e{page} §aequipped!"
+  set-stored: "§7Armor set §e{page} §7stored back into wardrobe."
+  set-empty: "§cThat armor set is empty!"
+  invalid-slot: "§cYou can only place armor in its correct slot."
+  wardrobe-opened: "§7Opening your wardrobe…"
