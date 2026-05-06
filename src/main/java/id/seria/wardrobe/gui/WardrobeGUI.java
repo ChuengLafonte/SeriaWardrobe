@@ -205,20 +205,32 @@ public class WardrobeGUI implements InventoryHolder {
     private int calculateUnlockedSlots() {
         if (player.hasPermission("seriawardrobe.admin")) return 9;
 
-        int max = plugin.getConfig().getInt("slot-limits.seriawardrobe.slots.default", 2);
-        var section = plugin.getConfig().getConfigurationSection("slot-limits");
-        
-        if (section != null) {
-            for (String key : section.getKeys(false)) {
+        int baseMax = 2; // Default minimum
+        int extraSum = 0;
+
+        // 1. Calculate Base (Highest Wins)
+        var ranksSection = plugin.getConfig().getConfigurationSection("slot-limits.ranks");
+        if (ranksSection != null) {
+            for (String key : ranksSection.getKeys(false)) {
                 if (player.hasPermission(key)) {
-                    int val = section.getInt(key);
-                    if (val > max) max = val;
+                    int val = ranksSection.getInt(key);
+                    if (val > baseMax) baseMax = val;
                 }
             }
         }
-        
-        // Clamp to 9 (our current GUI max)
-        return Math.min(max, 9);
+
+        // 2. Calculate Extra (Additive)
+        var extraSection = plugin.getConfig().getConfigurationSection("slot-limits.extra");
+        if (extraSection != null) {
+            for (String key : extraSection.getKeys(false)) {
+                if (player.hasPermission(key)) {
+                    extraSum += extraSection.getInt(key);
+                }
+            }
+        }
+
+        // Total = Base Max + Extra Sum (capped at 9 for current GUI)
+        return Math.min(baseMax + extraSum, 9);
     }
 
     private ItemStack makeLockedSlot() {

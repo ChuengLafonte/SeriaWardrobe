@@ -5,24 +5,25 @@
 # If you want more than 9, pagination will be needed in future updates.
 max-sets: 16
 
-# Rank-based slot limits.
-# Format: 'permission.node': number_of_slots
-# Players will get the HIGHEST number from all permissions they possess.
-# Default (no permission) is 2 slots.
+# Rank-based slot limits & Extra boosters.
+# Total slots = Max(ranks) + Sum(extra)
 slot-limits:
-  'seriawardrobe.slots.default': 2
-  # Free Ranks (Grinding)
-  'seriawardrobe.slots.free1': 3
-  'seriawardrobe.slots.free2': 4
-  'seriawardrobe.slots.free3': 5
-  'seriawardrobe.slots.free4': 6
-  'seriawardrobe.slots.free5': 7
-  'seriawardrobe.slots.free6': 8
-  'seriawardrobe.slots.free7': 9
-  # Premium Ranks
-  'seriawardrobe.slots.vip': 4
-  'seriawardrobe.slots.mvp': 6
-  'seriawardrobe.slots.mvpplus': 9
+  # Ranks: Player gets the HIGHEST value from these.
+  ranks:
+    'seriawardrobe.slots.default': 2
+    'seriawardrobe.slots.free1': 3
+    'seriawardrobe.slots.free2': 4
+    'seriawardrobe.slots.free3': 5
+    'seriawardrobe.slots.vip': 4
+    'seriawardrobe.slots.mvp': 6
+    'seriawardrobe.slots.mvpplus': 9
+
+  # Extra: Player gets the SUM of all these (additive).
+  # Use these for store items, boosters, or achievement rewards.
+  extra:
+    'seriawardrobe.slots.booster1': 1
+    'seriawardrobe.slots.booster2': 2
+    'seriawardrobe.slots.booster3': 3
 
 # GUI title shown to the player (supports color codes with §).
 gui-title: "§8§l|§8 Wardrobe"
