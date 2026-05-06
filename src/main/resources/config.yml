@@ -3,7 +3,7 @@
 
 # How many armor sets the wardrobe can hold globally (max 9 for current GUI layout).
 # If you want more than 9, pagination will be needed in future updates.
-max-sets: 9
+max-sets: 16
 
 # Rank-based slot limits.
 # Format: 'permission.node': number_of_slots
@@ -25,10 +25,10 @@ slot-limits:
   'seriawardrobe.slots.mvpplus': 9
 
 # GUI title shown to the player (supports color codes with §).
-gui-title: "§8⚔ §bWardrobe §8⚔"
+gui-title: "§8§l|§8 Wardrobe"
 
 # The title shown on each armor-set page (use {page} as placeholder).
-page-title: "§8⚔ §bWardrobe §7» §fSet {page}"
+page-title: "§8§l|§8 Wardrobe §7» §fSet {page}"
 
 # Messages (supports §-color-codes)
 messages:
@@ -38,3 +38,4 @@ messages:
   set-empty: "§cThat armor set is empty!"
   invalid-slot: "§cYou can only place armor in its correct slot."
   wardrobe-opened: "§7Opening your wardrobe…"
+  reload-success: "§aSeriaWardrobe configuration reloaded!"

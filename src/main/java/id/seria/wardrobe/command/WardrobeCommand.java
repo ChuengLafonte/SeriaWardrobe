@@ -24,6 +24,18 @@ public class WardrobeCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        // ── Handle /wardrobe reload ──
+        if (args.length > 0 && args[0].equalsIgnoreCase("reload")) {
+            if (!sender.hasPermission("seriawardrobe.admin")) {
+                sender.sendMessage(plugin.getConfig().getString("messages.no-permission", "§cNo permission."));
+                return true;
+            }
+            plugin.reloadConfig();
+            sender.sendMessage(plugin.getConfig().getString("messages.reload-success", "§aSeriaWardrobe configuration reloaded!"));
+            return true;
+        }
+
+        // ── Handle /wardrobe (open GUI) ──
         if (!(sender instanceof Player player)) {
             sender.sendMessage("§cOnly players can use this command.");
             return true;
@@ -46,6 +58,9 @@ public class WardrobeCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (args.length == 1 && sender.hasPermission("seriawardrobe.admin")) {
+            return List.of("reload");
+        }
         return Collections.emptyList();
     }
 }
