@@ -76,6 +76,12 @@ public class WardrobeListener implements Listener {
 
             int col = WardrobeGUI.getColumnForSlot(rawSlot);
 
+            // Block interaction with locked slots (based on rank)
+            if (col >= gui.getUnlockedSlots()) {
+                event.setCancelled(true);
+                return;
+            }
+
             // Block any interaction with the active set's armor rows (orange glass)
             if (gui.getData().getActiveSetIndex() == col) {
                 event.setCancelled(true);
@@ -176,6 +182,12 @@ public class WardrobeListener implements Listener {
             }
 
             int col = WardrobeGUI.getColumnForSlot(rawSlot);
+
+            // Block interaction with locked slots
+            if (col >= gui.getUnlockedSlots()) {
+                event.setCancelled(true);
+                return;
+            }
 
             // Block drags onto active-set column
             if (gui.getData().getActiveSetIndex() == col) {
@@ -379,8 +391,12 @@ public class WardrobeListener implements Listener {
 
         WardrobeData data = gui.getData();
         int maxSets = data.getMaxSets();
+        int unlocked = gui.getUnlockedSlots();
 
         for (int col = 0; col < maxSets; col++) {
+            // Skip locked slots
+            if (col >= unlocked) continue;
+            
             // Skip the active column — can't place into worn set
             if (data.getActiveSetIndex() == col) continue;
 

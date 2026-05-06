@@ -57,6 +57,7 @@ public class WardrobeGUI implements InventoryHolder {
     private final Player player;
     private final WardrobeData data;
     private final Inventory inventory;
+    private final int unlockedSlots;
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
@@ -64,6 +65,7 @@ public class WardrobeGUI implements InventoryHolder {
         this.plugin = plugin;
         this.player = player;
         this.data   = plugin.getWardrobeManager().getOrCreate(player.getUniqueId());
+        this.unlockedSlots = calculateUnlockedSlots();
 
         String title = plugin.getConfig().getString("gui-title", "§8⚔ §bWardrobe §8⚔");
         this.inventory = Bukkit.createInventory(this, SIZE, title);
@@ -78,9 +80,8 @@ public class WardrobeGUI implements InventoryHolder {
         inventory.clear();
         fillSeparatorRow();
 
-        int maxSets = data.getMaxSets();
         for (int col = 0; col < 9; col++) {
-            if (col < maxSets) {
+            if (col < unlockedSlots) {
                 buildSetColumn(col);
             } else {
                 buildLockedColumn(col);
@@ -201,6 +202,25 @@ public class WardrobeGUI implements InventoryHolder {
         return item;
     }
 
+    private int calculateUnlockedSlots() {
+        if (player.hasPermission("seriawardrobe.admin")) return 9;
+
+        int max = plugin.getConfig().getInt("slot-limits.seriawardrobe.slots.default", 2);
+        var section = plugin.getConfig().getConfigurationSection("slot-limits");
+        
+        if (section != null) {
+            for (String key : section.getKeys(false)) {
+                if (player.hasPermission(key)) {
+                    int val = section.getInt(key);
+                    if (val > max) max = val;
+                }
+            }
+        }
+        
+        // Clamp to 9 (our current GUI max)
+        return Math.min(max, 9);
+    }
+
     private ItemStack makeLockedSlot() {
         return makeFiller(Material.RED_STAINED_GLASS_PANE, "§c§lLocked");
     }
@@ -293,4 +313,5 @@ public class WardrobeGUI implements InventoryHolder {
 
     public Player getPlayer() { return player; }
     public WardrobeData getData() { return data; }
+    public int getUnlockedSlots() { return unlockedSlots; }
 }
