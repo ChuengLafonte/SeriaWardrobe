@@ -11,17 +11,24 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.*;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
 /**
  * Handles all inventory interactions inside the WardrobeGUI.
- * Responsibilities:
- *  1. Block invalid placements (wrong armor type in wrong row, separator, buttons).
- *  2. Update model + GUI when a piece is placed or removed.
- *  3. Handle the "Use" button: swap wardrobe set ↔ player's equipped armor.
- *  4. Persist data on close.
+ *
+ * Fix #1 — Filler items (glass panes, dyes used as buttons) are blocked
+ *           from being picked up or moved by the player.
+ *
+ * Fix #2 — "Use" button now implements bind-slot logic:
+ *   • Click Use on an empty slot    → nothing (message).
+ *   • Click Use on a slot (no active)  → equip that set, mark it orange_dye,
+ *                                        armor row shows orange glass placeholders.
+ *   • Click Use on the SAME slot (already active) → unequip: return armor from
+ *                                        player back into that slot, clear active.
+ *   • Click Use on a DIFFERENT slot (another is active) → first return armor
+ *                                        from player to the previously active slot,
+ *                                        then equip the new slot and mark it orange.
  */
 public class WardrobeListener implements Listener {
 
@@ -42,16 +49,16 @@ public class WardrobeListener implements Listener {
         int rawSlot = event.getRawSlot();
         ClickType click = event.getClick();
 
-        // ── Clicked inside the wardrobe GUI ──────────────────────────────────
+        // ── Click is inside the wardrobe GUI ─────────────────────────────────
         if (clickedInv != null && clickedInv.getHolder() instanceof WardrobeGUI) {
 
-            // Separator row — always block
+            // ① Separator row — always block
             if (WardrobeGUI.isSeparator(rawSlot)) {
                 event.setCancelled(true);
                 return;
             }
 
-            // Use button
+            // ② Use / Active button row
             if (WardrobeGUI.isUseButton(rawSlot)) {
                 event.setCancelled(true);
                 int col = WardrobeGUI.getColumnForSlot(rawSlot);
@@ -59,32 +66,41 @@ public class WardrobeListener implements Listener {
                 return;
             }
 
+            // ③ Armor rows — validate piece type and block filler pickup
             int armorRow = WardrobeGUI.getArmorRowForSlot(rawSlot);
             if (armorRow < 0) {
+                // Slot outside expected rows (shouldn't happen, but be safe)
                 event.setCancelled(true);
                 return;
             }
 
-            // ── Armor slot interaction ─────────────────────────────────────────
             int col = WardrobeGUI.getColumnForSlot(rawSlot);
 
-            // Shift-click from player inventory → wardrobe not allowed here;
-            // handled via shift-click into the wardrobe's own slots below.
-            if (click == ClickType.SHIFT_LEFT || click == ClickType.SHIFT_RIGHT) {
-                // Shifting FROM wardrobe TO player inventory — always allow removal
-                ItemStack current = clickedInv.getItem(rawSlot);
-                if (current != null && current.getType() != Material.AIR
-                        && !isFillerItem(current)) {
-                    // Allow, and update model afterward via scheduleUpdate
-                    scheduleUpdate(player, gui, col);
-                    return; // let Bukkit handle the shift
-                } else {
-                    event.setCancelled(true);
-                    return;
-                }
+            // Block any interaction with the active set's armor rows (orange glass)
+            if (gui.getData().getActiveSetIndex() == col) {
+                event.setCancelled(true);
+                return;
             }
 
-            // Placing a cursor item into an armor slot
+            // Block pickup/interaction with filler items (glass panes etc.)
+            ItemStack currentItem = event.getCurrentItem();
+            if (isFillerItem(currentItem)) {
+                event.setCancelled(true);
+                return;
+            }
+
+            // Shift-click WITHIN wardrobe → send piece back to player inventory
+            if (click == ClickType.SHIFT_LEFT || click == ClickType.SHIFT_RIGHT) {
+                if (currentItem != null && currentItem.getType() != Material.AIR) {
+                    // Let Bukkit move it; sync model 1 tick later
+                    scheduleUpdate(player, gui, col);
+                    return;
+                }
+                event.setCancelled(true);
+                return;
+            }
+
+            // Placing a cursor item into the slot — validate armor type
             ItemStack cursor = event.getCursor();
             if (cursor != null && cursor.getType() != Material.AIR) {
                 if (!WardrobeGUI.isValidArmorForRow(cursor, armorRow)) {
@@ -95,20 +111,19 @@ public class WardrobeListener implements Listener {
                 }
             }
 
-            // Picking up from a slot — always allowed; update model after
+            // Any other valid interaction in armor rows — sync model after
             scheduleUpdate(player, gui, col);
 
         } else {
-            // ── Clicked in player inventory while wardrobe is open ────────────
+            // ── Click is in the player inventory while wardrobe is open ───────
 
-            // Shift-click from player inventory into wardrobe
             if (click == ClickType.SHIFT_LEFT || click == ClickType.SHIFT_RIGHT) {
                 ItemStack item = event.getCurrentItem();
                 if (item == null || item.getType() == Material.AIR) {
                     event.setCancelled(true);
                     return;
                 }
-                // Try to auto-place into the correct row
+                // Try to auto-place into the correct armor row
                 event.setCancelled(true);
                 autoPlaceArmorIntoWardrobe(player, gui, item, event);
             }
@@ -122,11 +137,10 @@ public class WardrobeListener implements Listener {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         if (!(event.getInventory().getHolder() instanceof WardrobeGUI gui)) return;
 
-        // Check if any dragged slot falls inside the wardrobe
         for (int rawSlot : event.getRawSlots()) {
-            if (rawSlot >= WardrobeGUI.SIZE) continue; // player inventory side
+            if (rawSlot >= WardrobeGUI.SIZE) continue; // player side — fine
 
-            // Block drags into separator or button rows
+            // Block drags into separator or button row
             if (WardrobeGUI.isSeparator(rawSlot) || WardrobeGUI.isUseButton(rawSlot)) {
                 event.setCancelled(true);
                 return;
@@ -134,6 +148,14 @@ public class WardrobeListener implements Listener {
 
             int armorRow = WardrobeGUI.getArmorRowForSlot(rawSlot);
             if (armorRow < 0) {
+                event.setCancelled(true);
+                return;
+            }
+
+            int col = WardrobeGUI.getColumnForSlot(rawSlot);
+
+            // Block drags onto active-set column
+            if (gui.getData().getActiveSetIndex() == col) {
                 event.setCancelled(true);
                 return;
             }
@@ -148,7 +170,7 @@ public class WardrobeListener implements Listener {
             }
         }
 
-        // If we get here the drag is valid — update model after
+        // Valid drag — sync model after
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             for (int rawSlot : event.getRawSlots()) {
                 if (rawSlot < WardrobeGUI.SIZE && WardrobeGUI.getArmorRowForSlot(rawSlot) >= 0) {
@@ -168,117 +190,153 @@ public class WardrobeListener implements Listener {
         if (!(event.getPlayer() instanceof Player player)) return;
         if (!(event.getInventory().getHolder() instanceof WardrobeGUI gui)) return;
 
-        // Sync all slots to model and save
         syncAllSlotsToModel(gui);
         plugin.getWardrobeManager().save(player.getUniqueId());
     }
 
-    // ─── Use Button Logic ─────────────────────────────────────────────────────
+    // ─── Use Button — Bind-Slot Logic ─────────────────────────────────────────
 
     /**
-     * Swap the player's currently equipped armor with the selected wardrobe set.
+     * Implements the bind-slot "Use" mechanic:
      *
-     *  Steps:
-     *   1. Read wardrobe set.
-     *   2. If set is empty → send error, abort.
-     *   3. Read player's current armor (helmet, chest, legs, boots).
-     *   4. Set player's armor to wardrobe pieces.
-     *   5. Store old player armor back into wardrobe set.
-     *   6. Refresh GUI column.
-     *   7. Save.
+     *   activeSlot = data.getActiveSetIndex()   (-1 = none worn)
+     *
+     *   Case A  col == activeSlot  → UNEQUIP
+     *            • Pull armor from player body → store in col's set
+     *            • activeSetIndex = -1
+     *            • Refresh col
+     *
+     *   Case B  activeSlot == -1 and col is not empty  → EQUIP
+     *            • Pull armor from col's set → put on player body
+     *            • col's set pieces set to null (they're on body)
+     *            • activeSetIndex = col
+     *            • Refresh col
+     *
+     *   Case C  activeSlot >= 0 and col != activeSlot  → SWITCH
+     *            • Return armor from player → store in activeSlot's set
+     *            • Refresh activeSlot column
+     *            • Then equip col (same as Case B)
      */
     private void handleUseButton(Player player, WardrobeGUI gui, int col) {
         WardrobeData data = gui.getData();
-        ArmorSet set = data.getSet(col);
+        int activeSlot = data.getActiveSetIndex();
 
-        if (set.isEmpty()) {
-            sendMsg(player, plugin.getConfig().getString("messages.set-empty",
-                    "§cThat armor set is empty!"));
+        // ── Case A: toggle off the currently active set ───────────────────
+        if (col == activeSlot) {
+            unequipActiveSet(player, gui);
+            sendMsg(player, plugin.getConfig()
+                    .getString("messages.set-stored", "§7Armor set §e{page} §7stored back into wardrobe.")
+                    .replace("{page}", String.valueOf(col + 1)));
+            plugin.getWardrobeManager().save(player.getUniqueId());
             return;
         }
 
+        // ── Check target set is not empty ─────────────────────────────────
+        ArmorSet targetSet = data.getSet(col);
+        if (targetSet.isEmpty()) {
+            sendMsg(player, plugin.getConfig()
+                    .getString("messages.set-empty", "§cThat armor set is empty!"));
+            return;
+        }
+
+        // ── Case C: another set is active — return it first ───────────────
+        if (activeSlot >= 0 && activeSlot < data.getMaxSets()) {
+            unequipActiveSet(player, gui);
+        }
+
+        // ── Case B (or C continued): equip the target set ─────────────────
+        equipSet(player, gui, col);
+
+        sendMsg(player, plugin.getConfig()
+                .getString("messages.set-equipped", "§aArmor set §e{page} §aequipped!")
+                .replace("{page}", String.valueOf(col + 1)));
+        plugin.getWardrobeManager().save(player.getUniqueId());
+    }
+
+    /**
+     * Equips the armor set at {@code col} onto the player's body.
+     * Clears the set's piece slots (pieces are now on the body) and marks it active.
+     */
+    private void equipSet(Player player, WardrobeGUI gui, int col) {
+        WardrobeData data = gui.getData();
+        ArmorSet set = data.getSet(col);
         PlayerInventory pInv = player.getInventory();
 
-        // Snapshot current player armor
-        ItemStack oldHelmet      = pInv.getHelmet();
-        ItemStack oldChestplate  = pInv.getChestplate();
-        ItemStack oldLeggings    = pInv.getLeggings();
-        ItemStack oldBoots       = pInv.getBoots();
-
-        // Equip wardrobe set onto player
         pInv.setHelmet(     cloneOrNull(set.getHelmet())     );
         pInv.setChestplate( cloneOrNull(set.getChestplate()) );
         pInv.setLeggings(   cloneOrNull(set.getLeggings())   );
         pInv.setBoots(      cloneOrNull(set.getBoots())      );
 
-        // Store old armor back into wardrobe set
-        set.setPiece(0, cloneOrNull(oldHelmet));
-        set.setPiece(1, cloneOrNull(oldChestplate));
-        set.setPiece(2, cloneOrNull(oldLeggings));
-        set.setPiece(3, cloneOrNull(oldBoots));
+        // Clear wardrobe slots — pieces are now on the player's body
+        set.setPiece(0, null);
+        set.setPiece(1, null);
+        set.setPiece(2, null);
+        set.setPiece(3, null);
 
-        // Refresh GUI to reflect new wardrobe contents
+        data.setActiveSetIndex(col);
         gui.refreshColumn(col);
+    }
 
-        sendMsg(player, plugin.getConfig().getString("messages.set-equipped",
-                "§aArmor set §e{page} §aequipped!").replace("{page}", String.valueOf(col + 1)));
+    /**
+     * Returns the player's currently worn armor back into the active wardrobe slot,
+     * then clears their armor slots and resets activeSetIndex to -1.
+     */
+    private void unequipActiveSet(Player player, WardrobeGUI gui) {
+        WardrobeData data = gui.getData();
+        int activeSlot = data.getActiveSetIndex();
+        if (activeSlot < 0 || activeSlot >= data.getMaxSets()) return;
 
-        plugin.getWardrobeManager().save(player.getUniqueId());
+        ArmorSet set = data.getSet(activeSlot);
+        PlayerInventory pInv = player.getInventory();
+
+        // Store what the player is wearing back into the wardrobe set
+        set.setPiece(0, cloneOrNull(pInv.getHelmet()));
+        set.setPiece(1, cloneOrNull(pInv.getChestplate()));
+        set.setPiece(2, cloneOrNull(pInv.getLeggings()));
+        set.setPiece(3, cloneOrNull(pInv.getBoots()));
+
+        // Unequip player armor
+        pInv.setHelmet(null);
+        pInv.setChestplate(null);
+        pInv.setLeggings(null);
+        pInv.setBoots(null);
+
+        data.setActiveSetIndex(-1);
+        gui.refreshColumn(activeSlot);
     }
 
     // ─── Auto-Place (Shift-click from player inventory) ───────────────────────
 
-    /**
-     * Tries to auto-place the shift-clicked item into the correct armor row
-     * in the first column that has an empty slot for that piece type.
-     */
     private void autoPlaceArmorIntoWardrobe(Player player, WardrobeGUI gui,
                                              ItemStack item, InventoryClickEvent event) {
-        // Determine which armor row this piece belongs to
-        int targetRow = -1;
-        String typeName = item.getType().name();
-        if (typeName.endsWith("_HELMET") || typeName.endsWith("_SKULL") || typeName.equals("CARVED_PUMPKIN"))
-            targetRow = WardrobeGUI.ROW_HELMET;
-        else if (typeName.endsWith("_CHESTPLATE") || typeName.equals("ELYTRA"))
-            targetRow = WardrobeGUI.ROW_CHESTPLATE;
-        else if (typeName.endsWith("_LEGGINGS"))
-            targetRow = WardrobeGUI.ROW_LEGGINGS;
-        else if (typeName.endsWith("_BOOTS"))
-            targetRow = WardrobeGUI.ROW_BOOTS;
-
-        if (targetRow < 0) return; // not an armor piece
+        int targetRow = getArmorRowForItem(item);
+        if (targetRow < 0) return;
 
         WardrobeData data = gui.getData();
         int maxSets = data.getMaxSets();
 
-        // Find the first column with an empty armor piece for that row
         for (int col = 0; col < maxSets; col++) {
+            // Skip the active column — can't place into worn set
+            if (data.getActiveSetIndex() == col) continue;
+
             ArmorSet set = data.getSet(col);
             ItemStack existing = set.getPiece(targetRow);
             if (existing == null || existing.getType() == Material.AIR) {
-                // Place it
                 set.setPiece(targetRow, item.clone());
-                event.setCurrentItem(null); // remove from player inventory
+                event.setCurrentItem(null);
                 gui.refreshColumn(col);
                 plugin.getWardrobeManager().save(player.getUniqueId());
                 return;
             }
         }
-        // All columns full for this piece type — do nothing
     }
 
     // ─── Model Sync Helpers ───────────────────────────────────────────────────
 
-    /**
-     * Reads a single inventory slot back to the model, then refreshes the GUI column.
-     * Scheduled one tick later so Bukkit has updated the inventory first.
-     */
     private void scheduleUpdate(Player player, WardrobeGUI gui, int col) {
         plugin.getServer().getScheduler().runTask(plugin, () -> {
-            // Sync all 4 rows for this column
             for (int row = 0; row < 4; row++) {
-                int slot = row * 9 + col;
-                syncSlotToModel(gui, slot, col);
+                syncSlotToModel(gui, row * 9 + col, col);
             }
             gui.refreshColumn(col);
             plugin.getWardrobeManager().save(player.getUniqueId());
@@ -289,8 +347,10 @@ public class WardrobeListener implements Listener {
         int armorRow = WardrobeGUI.getArmorRowForSlot(slot);
         if (armorRow < 0) return;
 
+        // Never sync an active slot from GUI — those are orange glass placeholders
+        if (gui.getData().getActiveSetIndex() == col) return;
+
         ItemStack current = gui.getInventory().getItem(slot);
-        // If it's a filler item or null, treat as empty
         if (current == null || current.getType() == Material.AIR || isFillerItem(current)) {
             gui.getData().getSet(col).setPiece(armorRow, null);
         } else {
@@ -301,6 +361,8 @@ public class WardrobeListener implements Listener {
     private void syncAllSlotsToModel(WardrobeGUI gui) {
         int maxSets = gui.getData().getMaxSets();
         for (int col = 0; col < maxSets; col++) {
+            // Skip active column — pieces are on the player's body, not in GUI
+            if (gui.getData().getActiveSetIndex() == col) continue;
             for (int row = 0; row < 4; row++) {
                 syncSlotToModel(gui, row * 9 + col, col);
             }
@@ -309,11 +371,36 @@ public class WardrobeListener implements Listener {
 
     // ─── Utilities ────────────────────────────────────────────────────────────
 
-    /** Returns true if the item is a decorative filler/placeholder (glass pane). */
-    private boolean isFillerItem(ItemStack item) {
-        if (item == null) return true;
+    /**
+     * Determines which armor row (0-3) an item belongs to based on its material.
+     * Returns -1 if it is not an armor piece.
+     */
+    private int getArmorRowForItem(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR) return -1;
         String name = item.getType().name();
-        return name.endsWith("GLASS_PANE") || name.endsWith("DYE");
+        if (name.endsWith("_HELMET") || name.endsWith("_SKULL") || name.equals("CARVED_PUMPKIN"))
+            return WardrobeGUI.ROW_HELMET;
+        if (name.endsWith("_CHESTPLATE") || name.equals("ELYTRA"))
+            return WardrobeGUI.ROW_CHESTPLATE;
+        if (name.endsWith("_LEGGINGS"))
+            return WardrobeGUI.ROW_LEGGINGS;
+        if (name.endsWith("_BOOTS"))
+            return WardrobeGUI.ROW_BOOTS;
+        return -1;
+    }
+
+    /**
+     * Returns true if the item is a decorative filler that the player
+     * should never be able to pick up (glass panes, dyes used as buttons).
+     */
+    private boolean isFillerItem(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR) return false;
+        String name = item.getType().name();
+        return name.endsWith("_GLASS_PANE")
+                || name.endsWith("_DYE")
+                || name.equals("GRAY_DYE")
+                || name.equals("LIME_DYE")
+                || name.equals("ORANGE_DYE");
     }
 
     private ItemStack cloneOrNull(ItemStack item) {
@@ -321,8 +408,6 @@ public class WardrobeListener implements Listener {
     }
 
     private void sendMsg(Player player, String msg) {
-        if (msg != null && !msg.isEmpty()) {
-            player.sendMessage(msg);
-        }
+        if (msg != null && !msg.isEmpty()) player.sendMessage(msg);
     }
 }

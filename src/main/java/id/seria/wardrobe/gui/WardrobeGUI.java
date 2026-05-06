@@ -98,12 +98,16 @@ public class WardrobeGUI implements InventoryHolder {
     private void buildSetColumn(int col) {
         ArmorSet set = data.getSet(col);
         int setNumber = col + 1;
+        boolean isActive = data.getActiveSetIndex() == col;
 
         // Armor piece slots (rows 0-3)
         for (int row = 0; row < 4; row++) {
             int slot = row * 9 + col;
             ItemStack piece = set.getPiece(row);
-            if (piece != null && piece.getType() != Material.AIR) {
+            if (isActive) {
+                // Pieces are on the player's body — show "In Use" placeholder
+                inventory.setItem(slot, makeInUseSlot(row, setNumber));
+            } else if (piece != null && piece.getType() != Material.AIR) {
                 inventory.setItem(slot, piece.clone());
             } else {
                 inventory.setItem(slot, makeEmptyArmorSlot(row, setNumber));
@@ -115,10 +119,16 @@ public class WardrobeGUI implements InventoryHolder {
     }
 
     private void buildUseButton(int col) {
-        ArmorSet set = data.getSet(col);
         int setNumber = col + 1;
         int slot = ROW_BUTTONS * 9 + col;
-        inventory.setItem(slot, makeUseButton(setNumber, set));
+
+        if (data.getActiveSetIndex() == col) {
+            // This set is currently worn — show orange "in use" indicator
+            inventory.setItem(slot, makeActiveButton(setNumber));
+        } else {
+            ArmorSet set = data.getSet(col);
+            inventory.setItem(slot, makeUseButton(setNumber, set));
+        }
     }
 
     private void buildLockedColumn(int col) {
@@ -165,9 +175,9 @@ public class WardrobeGUI implements InventoryHolder {
                 : "§aUse Set " + setNumber);
         List<String> lore = new ArrayList<>();
         if (!empty) {
-            lore.add("§7Click to equip set §f" + setNumber + "§7.");
-            lore.add("§7Your current armor will be swapped");
-            lore.add("§7back into this wardrobe slot.");
+            lore.add("§7Click to equip this armor set.");
+            lore.add("§7Previously worn armor will be");
+            lore.add("§7returned to its wardrobe slot.");
         } else {
             lore.add("§8Place armor pieces above to create a set.");
         }
@@ -176,8 +186,32 @@ public class WardrobeGUI implements InventoryHolder {
         return item;
     }
 
+    /** Orange dye button shown on the currently active (worn) armor set column. */
+    private ItemStack makeActiveButton(int setNumber) {
+        ItemStack item = new ItemStack(Material.ORANGE_DYE);
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName("§6§l✦ Set " + setNumber + " §e§l(In Use)");
+        meta.setLore(List.of(
+                "§7This set is currently equipped.",
+                "§7Click again to unequip and",
+                "§7store the armor back here."
+        ));
+        item.setItemMeta(meta);
+        return item;
+    }
+
     private ItemStack makeLockedSlot() {
         return makeFiller(Material.RED_STAINED_GLASS_PANE, "§c§lLocked");
+    }
+
+    /** Placeholder shown in armor rows when that set's pieces are currently worn. */
+    private ItemStack makeInUseSlot(int pieceRow, int setNumber) {
+        ItemStack item = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName("§6Set " + setNumber + " — §e" + PIECE_LABEL[pieceRow]);
+        meta.setLore(List.of("§8Currently equipped on your body."));
+        item.setItemMeta(meta);
+        return item;
     }
 
     private ItemStack makeFiller(Material material, String name) {

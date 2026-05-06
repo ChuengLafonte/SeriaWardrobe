@@ -73,6 +73,10 @@ public class WardrobeManager {
         if (!file.exists()) return data;
 
         YamlConfiguration cfg = YamlConfiguration.loadConfiguration(file);
+
+        // Load active set index (-1 = none)
+        data.setActiveSetIndex(cfg.getInt("active-set", -1));
+
         for (int setIdx = 0; setIdx < maxSets; setIdx++) {
             String setPath = "sets.set" + (setIdx + 1);
             if (!cfg.contains(setPath)) continue;
@@ -91,10 +95,15 @@ public class WardrobeManager {
         File file = getFile(data.getPlayerUUID());
         YamlConfiguration cfg = new YamlConfiguration();
 
+        // Persist active set index
+        cfg.set("active-set", data.getActiveSetIndex());
+
         for (int setIdx = 0; setIdx < data.getMaxSets(); setIdx++) {
             ArmorSet set = data.getSet(setIdx);
-            if (set == null || set.isEmpty()) continue;
+            // Always save the set path even if "empty" so we don't lose
+            // the record that pieces are on the player's body (active set)
             String setPath = "sets.set" + (setIdx + 1);
+            if (set == null) continue;
             cfg.set(setPath + ".name", set.getDisplayName());
             for (int p = 0; p < 4; p++) {
                 cfg.set(setPath + "." + PIECE_KEYS[p], set.getPiece(p));
