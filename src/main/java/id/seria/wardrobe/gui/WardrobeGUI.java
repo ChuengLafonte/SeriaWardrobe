@@ -1,6 +1,7 @@
 package id.seria.wardrobe.gui;
 
 import id.seria.wardrobe.SeriaWardrobePlugin;
+import id.seria.wardrobe.hook.MMOItemsHook;
 import id.seria.wardrobe.model.ArmorSet;
 import id.seria.wardrobe.model.WardrobeData;
 import org.bukkit.Bukkit;
@@ -252,19 +253,34 @@ public class WardrobeGUI implements InventoryHolder {
 
     /**
      * Validates whether an item can be placed in a given armor row.
-     * Returns true if the item's type matches the expected armor type.
+     *
+     * Check order:
+     *  1. MMOItems NBT tag (handles custom heads, custom armor items)
+     *  2. Vanilla material name matching (fallback)
+     *
+     * Vanilla helmet row also accepts all *_HEAD materials (PLAYER_HEAD,
+     * ZOMBIE_HEAD, CREEPER_HEAD, etc.) and CARVED_PUMPKIN.
      */
     public static boolean isValidArmorForRow(ItemStack item, int row) {
         if (item == null || item.getType() == Material.AIR) return false;
+
+        // ── MMOItems check (has priority — custom heads used as helmets) ───
+        if (MMOItemsHook.isValidForRow(item, row)) return true;
+
+        // ── Vanilla material check ─────────────────────────────────────────
         String typeName = item.getType().name();
         return switch (row) {
-            case ROW_HELMET     -> typeName.endsWith("_HELMET")     || typeName.endsWith("_SKULL") || typeName.equals("CARVED_PUMPKIN");
+            case ROW_HELMET     -> typeName.endsWith("_HELMET")
+                                || typeName.endsWith("_SKULL")
+                                || typeName.endsWith("_HEAD")   // PLAYER_HEAD, ZOMBIE_HEAD, etc.
+                                || typeName.equals("CARVED_PUMPKIN");
             case ROW_CHESTPLATE -> typeName.endsWith("_CHESTPLATE") || typeName.equals("ELYTRA");
             case ROW_LEGGINGS   -> typeName.endsWith("_LEGGINGS");
             case ROW_BOOTS      -> typeName.endsWith("_BOOTS");
             default -> false;
         };
     }
+
 
     // ── InventoryHolder ───────────────────────────────────────────────────────
 

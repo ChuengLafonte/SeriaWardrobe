@@ -86,15 +86,33 @@ public class WardrobeListener implements Listener {
             ItemStack cursor = event.getCursor();
             boolean cursorEmpty = cursor == null || cursor.getType() == Material.AIR;
 
-            // Block pickup of filler items ONLY when cursor is empty.
-            // If the player has an armor piece on cursor, allow them to place
-            // it even over a glass-pane placeholder slot.
+            // ── Placing armor over a filler slot ─────────────────────────────
+            // Bukkit's default behavior when the cursor has an item and the slot
+            // has a different item is to SWAP them, which would put the glass pane
+            // onto the player's cursor (and eventually into their inventory).
+            // We intercept and handle placement manually to discard the filler.
+            if (!cursorEmpty && isFillerItem(currentItem)) {
+                event.setCancelled(true);
+                // Validate armor type before accepting
+                if (!WardrobeGUI.isValidArmorForRow(cursor, armorRow)) {
+                    sendMsg(player, plugin.getConfig().getString("messages.invalid-slot",
+                            "§cYou can only place armor in its correct slot."));
+                    return;
+                }
+                // Place armor; filler is simply discarded (it's a GUI decoration)
+                gui.getInventory().setItem(rawSlot, cursor.clone());
+                player.setItemOnCursor(new ItemStack(Material.AIR));
+                scheduleUpdate(player, gui, col);
+                return;
+            }
+
+            // ── Block pickup of filler items when cursor is empty ─────────────
             if (isFillerItem(currentItem) && cursorEmpty) {
                 event.setCancelled(true);
                 return;
             }
 
-            // Shift-click WITHIN wardrobe → send piece back to player inventory
+            // ── Shift-click WITHIN wardrobe → send piece back to player inv ──
             if (click == ClickType.SHIFT_LEFT || click == ClickType.SHIFT_RIGHT) {
                 if (!isFillerItem(currentItem)
                         && currentItem != null
@@ -106,7 +124,7 @@ public class WardrobeListener implements Listener {
                 return;
             }
 
-            // Placing a cursor item into the slot — validate armor type
+            // ── Placing cursor into a slot that already has real armor (swap) ─
             if (!cursorEmpty) {
                 if (!WardrobeGUI.isValidArmorForRow(cursor, armorRow)) {
                     event.setCancelled(true);

@@ -2,6 +2,7 @@ package id.seria.wardrobe;
 
 import id.seria.wardrobe.command.WardrobeCommand;
 import id.seria.wardrobe.data.WardrobeManager;
+import id.seria.wardrobe.hook.MMOItemsHook;
 import id.seria.wardrobe.listener.WardrobeListener;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -20,6 +21,9 @@ public final class SeriaWardrobePlugin extends JavaPlugin {
 
         // Save default config
         saveDefaultConfig();
+
+        // Hook into optional plugins
+        MMOItemsHook.setup();
 
         // Initialize data manager
         wardrobeManager = new WardrobeManager(this);

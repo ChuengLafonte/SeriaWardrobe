@@ -4,6 +4,7 @@ main: id.seria.wardrobe.SeriaWardrobePlugin
 api-version: '1.21'
 author: Seria
 description: Armor wardrobe system — save and switch armor sets instantly.
+softdepend: [MMOItems]
 
 commands:
   wardrobe:
