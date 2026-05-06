@@ -82,17 +82,23 @@ public class WardrobeListener implements Listener {
                 return;
             }
 
-            // Block pickup/interaction with filler items (glass panes etc.)
             ItemStack currentItem = event.getCurrentItem();
-            if (isFillerItem(currentItem)) {
+            ItemStack cursor = event.getCursor();
+            boolean cursorEmpty = cursor == null || cursor.getType() == Material.AIR;
+
+            // Block pickup of filler items ONLY when cursor is empty.
+            // If the player has an armor piece on cursor, allow them to place
+            // it even over a glass-pane placeholder slot.
+            if (isFillerItem(currentItem) && cursorEmpty) {
                 event.setCancelled(true);
                 return;
             }
 
             // Shift-click WITHIN wardrobe → send piece back to player inventory
             if (click == ClickType.SHIFT_LEFT || click == ClickType.SHIFT_RIGHT) {
-                if (currentItem != null && currentItem.getType() != Material.AIR) {
-                    // Let Bukkit move it; sync model 1 tick later
+                if (!isFillerItem(currentItem)
+                        && currentItem != null
+                        && currentItem.getType() != Material.AIR) {
                     scheduleUpdate(player, gui, col);
                     return;
                 }
@@ -101,8 +107,7 @@ public class WardrobeListener implements Listener {
             }
 
             // Placing a cursor item into the slot — validate armor type
-            ItemStack cursor = event.getCursor();
-            if (cursor != null && cursor.getType() != Material.AIR) {
+            if (!cursorEmpty) {
                 if (!WardrobeGUI.isValidArmorForRow(cursor, armorRow)) {
                     event.setCancelled(true);
                     sendMsg(player, plugin.getConfig().getString("messages.invalid-slot",
@@ -255,6 +260,11 @@ public class WardrobeListener implements Listener {
 
     /**
      * Equips the armor set at {@code col} onto the player's body.
+     *
+     * Before equipping, any armor the player is currently wearing that is NOT
+     * tracked by a wardrobe slot is returned to their inventory.
+     * If the inventory is full the pieces are dropped at the player's feet.
+     *
      * Clears the set's piece slots (pieces are now on the body) and marks it active.
      */
     private void equipSet(Player player, WardrobeGUI gui, int col) {
@@ -262,6 +272,15 @@ public class WardrobeListener implements Listener {
         ArmorSet set = data.getSet(col);
         PlayerInventory pInv = player.getInventory();
 
+        // ── Salvage any non-wardrobe armor currently on the player ───────────
+        // unequipActiveSet() already cleared armor for the previously active set.
+        // If activeSetIndex is -1 here, the player was wearing their own armor
+        // (not from wardrobe) — we must return those pieces before overwriting.
+        if (data.getActiveSetIndex() < 0) {
+            salvagePlayerArmor(player);
+        }
+
+        // ── Equip wardrobe set ────────────────────────────────────────────────
         pInv.setHelmet(     cloneOrNull(set.getHelmet())     );
         pInv.setChestplate( cloneOrNull(set.getChestplate()) );
         pInv.setLeggings(   cloneOrNull(set.getLeggings())   );
@@ -275,6 +294,34 @@ public class WardrobeListener implements Listener {
 
         data.setActiveSetIndex(col);
         gui.refreshColumn(col);
+    }
+
+    /**
+     * Returns whatever armor is currently on the player's body to their inventory.
+     * If any inventory slot is full, the excess item is dropped naturally at their
+     * feet so no armor is ever silently deleted.
+     */
+    private void salvagePlayerArmor(Player player) {
+        PlayerInventory pInv = player.getInventory();
+        ItemStack[] worn = {
+                pInv.getHelmet(),
+                pInv.getChestplate(),
+                pInv.getLeggings(),
+                pInv.getBoots()
+        };
+        // Clear armor slots first so addItem doesn't fill them again
+        pInv.setHelmet(null);
+        pInv.setChestplate(null);
+        pInv.setLeggings(null);
+        pInv.setBoots(null);
+
+        for (ItemStack piece : worn) {
+            if (piece == null || piece.getType() == Material.AIR) continue;
+            var leftover = pInv.addItem(piece.clone());
+            // Drop any items that didn't fit
+            leftover.values().forEach(drop ->
+                    player.getWorld().dropItemNaturally(player.getLocation(), drop));
+        }
     }
 
     /**
